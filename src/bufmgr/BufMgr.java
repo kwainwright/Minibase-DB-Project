@@ -24,7 +24,21 @@ import java.util.HashMap;
  */
 public class BufMgr implements GlobalConst {
 
+	// This is the array of frames (it contains pages)
+	Page[] bufpool;
 
+	// This is the array of descriptors for the frames
+	FrameDesc[] frametab;
+
+	// Instead of having to search thru the hashmap looking for the
+	// page that the frame mapped to previously (and removing it) every
+	// single time we add a new mapping, we are keep two hashmaps to do
+	// this much more efficiently.
+	HashMap<Integer, Integer> Page2Frame;
+	HashMap<Integer, Integer> Frame2Page;
+
+	Replacer replacer;
+	  
   /**
    * Constructs a buffer manager by initializing member data.  
    * 
@@ -32,7 +46,18 @@ public class BufMgr implements GlobalConst {
    */
   public BufMgr(int numframes) {
 
-    throw new UnsupportedOperationException("Not implemented");
+	  // Initialize everything
+	  bufpool = new Page[numframes];
+	  frametab = new FrameDesc[numframes];
+	  for (int i=0; i<frametab.length; i++)
+	  {
+		  bufpool[i] = new Page();
+		  frametab[i] = new FrameDesc();
+	  }
+
+	  //replacer = new Clock(this); 
+	  Page2Frame = new HashMap<>();
+	  Frame2Page = new HashMap<>();
 
   } // public BufMgr(int numframes)
 
