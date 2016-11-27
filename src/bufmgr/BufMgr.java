@@ -5,8 +5,6 @@ import global.Minibase;
 import global.Page;
 import global.PageId;
 
-import java.util.HashMap;
-
 /**
  * <h3>Minibase Buffer Manager</h3>
  * The buffer manager manages an array of main memory pages.  The array is
@@ -30,12 +28,9 @@ public class BufMgr implements GlobalConst {
 	// This is the array of descriptors for the frames
 	FrameDesc[] frametab;
 
-	// Instead of having to search thru the hashmap looking for the
-	// page that the frame mapped to previously (and removing it) every
-	// single time we add a new mapping, we are keep two hashmaps to do
-	// this much more efficiently.
-	HashMap<Integer, Integer> Page2Frame;
-	HashMap<Integer, Integer> Frame2Page;
+	// Create a Page/Frame Mapper that will 
+	// hold the page to frame relationships
+	PageFrameMap pageFrameMap;
 
 	Replacer replacer;
 	  
@@ -56,8 +51,7 @@ public class BufMgr implements GlobalConst {
 	  }
 
 	  replacer = new Clock(this); 
-	  Page2Frame = new HashMap<>();
-	  Frame2Page = new HashMap<>();
+	  pageFrameMap = new PageFrameMap();
 
   } // public BufMgr(int numframes)
 
@@ -92,7 +86,7 @@ public class BufMgr implements GlobalConst {
   public void pinPage(PageId pageno, Page mempage, int contents) {
 	  
 	  // See if the page already is mapped into a frame
-	  Integer FrameNum = Page2Frame.get(pageno.pid);
+	  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);  
 	  if (FrameNum == null)
 	  {
 		  // There is no mapping for this page, go find a frame it can
@@ -125,7 +119,7 @@ public class BufMgr implements GlobalConst {
 				  frametab[framenum].dirty = false; 
 				  frametab[framenum].refbit = false; 
 				  frametab[framenum].pageno = new PageId(pageno.pid); 
-				  addToHashMap(pageno.pid, framenum);
+				  pageFrameMap.addToMap(framenum, pageno.pid);
 				  break;        
 			  }
 			  case PIN_MEMCPY:
@@ -140,7 +134,7 @@ public class BufMgr implements GlobalConst {
 				  frametab[framenum].dirty = false; 
 				  frametab[framenum].refbit = false; 
 				  frametab[framenum].pageno = new PageId(pageno.pid); 
-				  addToHashMap(pageno.pid, framenum);
+				  pageFrameMap.addToMap(framenum, pageno.pid);
 				  break;        
 			  }
 			  case PIN_NOOP:
@@ -182,7 +176,7 @@ public class BufMgr implements GlobalConst {
    */
   public void unpinPage(PageId pageno, boolean dirty) {
 
-	  Integer FrameNum = Page2Frame.get(pageno.pid);
+	  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);  
 	  if ((FrameNum == null) || frametab[FrameNum].pin_count == 0)
 	  {
 		  // We were told to unpin a page that was either not in the 
@@ -232,7 +226,7 @@ public class BufMgr implements GlobalConst {
 		  // Allocate the disk pages, return id of first page
 		  PageId pageno = Minibase.DiskManager.allocate_page(run_size);
 
-		  Integer FrameNum = Page2Frame.get(pageno.pid);
+		  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);  
 		  if ((FrameNum != null) && (frametab[FrameNum].pin_count > 0))
 		  {
 			  // The first page is already mapped into the buffer pool and pinned
@@ -256,7 +250,7 @@ public class BufMgr implements GlobalConst {
    */
   public void freePage(PageId pageno) {
 
-	  Integer FrameNum = Page2Frame.get(pageno.pid);
+	  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);
 	  if ((FrameNum != null) && (frametab[FrameNum].pin_count > 0))
 	  {
 		  // The page is mapped into the buffer pool and pinned,
@@ -298,7 +292,7 @@ public class BufMgr implements GlobalConst {
    */
   public void flushPage(PageId pageno) {
 	  
-	  Integer FrameNum = Page2Frame.get(pageno.pid);
+	  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);  
 	  if (FrameNum != null)
 	  {
 		  // Write the page to disk
@@ -335,19 +329,4 @@ public class BufMgr implements GlobalConst {
 	  return unpinned_count;
   }
 
-  private void addToHashMap(Integer Page, Integer Frame) {
-	  Integer oldPage = Frame2Page.get(Frame);
-	  if (oldPage != null)
-	  {
-		  // This frame was mapped to a previous page
-		  // so remove old entries from both hashmaps. 
-		  Page2Frame.remove(oldPage);
-		  Frame2Page.remove(Frame);
-	  }
-
-	  // Update (add to) both hashmaps
-	  Page2Frame.put(Page, Frame);
-	  Frame2Page.put(Frame, Page);
-  }
-  
 } // public class BufMgr implements GlobalConst
