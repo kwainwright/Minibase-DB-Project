@@ -67,7 +67,7 @@ public class Minibase {
         DiskManager.openDB(dbname);
       } else {
         DiskManager.createDB(dbname, num_pgs);
-        BufferManager.flushAllFrames();
+        BufferManager.flushAllPages();
       }
     } catch (Exception exc) {
       haltSystem(exc);

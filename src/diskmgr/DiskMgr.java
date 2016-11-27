@@ -167,7 +167,7 @@ public class DiskMgr implements GlobalConst {
    */
   public void closeDB() {
     try {
-      Minibase.BufferManager.flushAllFrames();
+      Minibase.BufferManager.flushAllPages();
       fp.close();
     } catch (IOException exc) {
       Minibase.haltSystem(exc);
