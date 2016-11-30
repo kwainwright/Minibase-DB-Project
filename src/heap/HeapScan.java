@@ -30,14 +30,14 @@ public class HeapScan implements GlobalConst {
   // --------------------------------------------------------------------------
 
   /**
-   * Constructs a file scan by pinning the directoy header page and initializing
+   * Constructs a file scan by pinning the directory header page and initializing
    * iterator fields.
    */
   protected HeapScan(HeapFile hf) {
 
     // pin the head page and get the count
     dirPage = new DirPage();
-    Minibase.BufferManager.pinPage(hf.headId, dirPage, PIN_DISKIO);
+    Minibase.BufferManager.pinPage(hf.pageId, dirPage, PIN_DISKIO);
     count = dirPage.getEntryCnt();
 
     // initialize other data fields

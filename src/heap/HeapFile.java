@@ -6,460 +6,433 @@ import global.PageId;
 import global.RID;
 
 /**
- * <h3>Minibase Heap Files</h3>
- * A heap file is an unordered set of records, stored on a set of pages. This
- * class provides basic support for inserting, selecting, updating, and deleting
- * records. Temporary heap files are used for external sorting and in other
- * relational operators. A sequential scan of a heap file (via the Scan class)
- * is the most basic access method.
+ * <h3>Minibase Heap Files</h3> A heap file is an unordered set of records,
+ * stored on a set of pages. This class provides basic support for inserting,
+ * selecting, updating, and deleting records. Temporary heap files are used for
+ * external sorting and in other relational operators. A sequential scan of a
+ * heap file (via the Scan class) is the most basic access method.
  */
 public class HeapFile implements GlobalConst {
 
-	static final short DATA_PAGE = 11;
-	static final short DIR_PAGE = 12;
+	static final short DATA_PAGE = 100;
+	static final short DIR_PAGE = 200;
 	String fileName;
-	PageId headId;
+	PageId pageId;
 	Boolean isTemp;
-	
-  /**
-   * If the given name already denotes a file, this opens it; otherwise, this
-   * creates a new empty file. A null name produces a temporary heap file which
-   * requires no DB entry.
-   */
-  public HeapFile(String name) {
-	  if (name == null)
-	  {
-		  // Construct a temporary heapfile.
-		  // Set heapfile name to an empty string so the toString() method works.
-		  isTemp = true;
-		  fileName = "";
-		  headId = null;
-	  }
-	  else
-	  {
-		  // Construct a heapfile.
-		  // Store heapfile name and attempt to get the pageid of the head dir
-		  // associated with it from the disk.
-		  isTemp = false;
-		  fileName = name;
-		  headId = Minibase.DiskManager.get_file_entry(fileName);
-	  }
 
-	  if (headId == null)
-	  {
-		  // We are either a temp heapfile or a previously undefined/new
-		  // one.  So, create the head dir and initialize it.
-		  DirPage dirPage = new DirPage();
-		  headId = Minibase.BufferManager.newPage(dirPage, 1);
-		  dirPage.setCurPage(headId);
-		  Minibase.BufferManager.unpinPage(headId, UNPIN_DIRTY);
-		  if (!isTemp)
-		  {
-			  // Not temp, so save the head dir pageid to disk for 
-			  // any future references.
-			  Minibase.DiskManager.add_file_entry(fileName, headId);
-		  }
-	  }
-  }
+	/**
+	 * If the given name already denotes a file, this opens it; otherwise, this
+	 * creates a new empty file. A null name produces a temporary heap file
+	 * which requires no DB entry.
+	 */
+	public HeapFile(String name) {
+		if (name == null) {
+			// Construct a temporary heapfile.
+			// Set the name to an empty string - need toString() method to work
+			isTemp = true;
+			fileName = "";
+			pageId = null;
+		} else {
+			// Construct a heapfile.
+			// Store the name and get the page ID of the head
+			isTemp = false;
+			fileName = name;
+			pageId = Minibase.DiskManager.get_file_entry(fileName);
+		}
 
-  /**
-   * Called by the garbage collector when there are no more references to the
-   * object; deletes the heap file if it's temporary.
-   */
-  protected void finalize() throws Throwable {
-	  if (isTemp)
-	  {
-		  deleteFile();
-	  }
-  }
+		// check to see if the pageID is null. Either this
+		// is a temp HeapFile or it's a new one
+		if (pageId == null) {
+			// Create the head dir and initialize it.
+			DirPage dirPage = new DirPage();
+			pageId = Minibase.BufferManager.newPage(dirPage, 1);
+			dirPage.setCurPage(pageId);
+			// unpin it - write it to disk
+			Minibase.BufferManager.unpinPage(pageId, UNPIN_DIRTY);
+			if (!isTemp) {
+				// This is not a temp file, so save the pageId
+				// for future retreival
+				Minibase.DiskManager.add_file_entry(fileName, pageId);
+			}
+		}
+	}
 
-  /**
-   * Deletes the heap file from the database, freeing all of its pages.
-   */
-  public void deleteFile() {
-	  // Start at the head dir.
-	  PageId dirId = new PageId(headId.pid);
-	  DirPage dirPage = new DirPage();
+	/**
+	 * Called by the garbage collector when there are no more references to the
+	 * object; deletes the heap file if it's temporary.
+	 */
+	protected void finalize() throws Throwable {
+		if (isTemp) {
+			deleteFile();
+		}
+	}
 
-	  do
-	  {
-		  // Pin current dir page and get the next dir page.
-		  PageId curPageId = new PageId(dirId.pid);
-		  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
-		  dirId = dirPage.getNextPage();
+	/**
+	 * Deletes the heap file from the database, freeing all of its pages.
+	 */
+	public void deleteFile() {
+		// Start at the head dir.
+		PageId dirId = new PageId(pageId.pid);
+		DirPage dirPage = new DirPage();
 
-		  // Go thru each directory entry on the dir page.
-		  for (short i=0; i < dirPage.getEntryCnt(); i++)
-		  {
-			  // Get the data pageid and free it.
-			  PageId dataId = dirPage.getPageId(i);
-			  Minibase.BufferManager.freePage(dataId);
-		  }
+		while (dirId.pid != INVALID_PAGEID) {
+			// Pin current dir page and get the next dir page.
+			PageId curPageId = new PageId(dirId.pid);
+			Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+			dirId = dirPage.getNextPage();
 
-		  // Unpin and free the current dir page.
-		  Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
-		  Minibase.BufferManager.freePage(curPageId);
-	  } while (dirId.pid != INVALID_PAGEID);
+			// Go thru each directory entry on the dir page.
+			for (short i = 0; i < dirPage.getEntryCnt(); i++) {
+				// Get the data pageid and free it.
+				PageId dataId = dirPage.getPageId(i);
+				Minibase.BufferManager.freePage(dataId);
+			}
 
-	  if (!isTemp)
-	  {
-		  // Not temp, so delete the heapfile entry from the disk.
-		  Minibase.DiskManager.delete_file_entry(fileName);
-	  }
-  }
+			// Unpin and free the current dir page.
+			Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
+			Minibase.BufferManager.freePage(curPageId);
+		}
 
-  /**
-   * Inserts a new record into the file and returns its RID.
-   * 
-   * @throws IllegalArgumentException if the record is too large
-   */
-  public RID insertRecord(byte[] record) {
-	  if (record.length > (PAGE_SIZE - DataPage.HEADER_SIZE - DataPage.SLOT_SIZE))
-	  {
-		  // If the record size is too big then we can't fit it.  The max length
-		  // is 1000 bytes (1024 - 20 - 4) for a record on a data page.
-		  throw new IllegalArgumentException();
-	  }
+		if (!isTemp) {
+			// Not temp, so delete the heapfile entry from the disk.
+			Minibase.DiskManager.delete_file_entry(fileName);
+		}
+	}
 
-	  // Start at the head dir.
-	  PageId dirId = new PageId(headId.pid);
-	  DirPage dirPage = new DirPage();
-	  PageId curPageId;
-	  RID rid = null;
+	/**
+	 * Inserts a new record into the file and returns its RID.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if the record is too large
+	 */
+	public RID insertRecord(byte[] record) {
+		if (record.length > (PAGE_SIZE - DataPage.HEADER_SIZE - DataPage.SLOT_SIZE)) {
+			// If the record size is too big then we can't fit it.
+			// Max length is 1000 bytes for a record on a data page.
+			throw new IllegalArgumentException();
+		}
 
-	  do
-	  {
-		  // Pin current dir page and get the next dir page.
-		  curPageId = new PageId(dirId.pid);
-		  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
-		  dirId = dirPage.getNextPage();
+		// Start at the head dir.
+		PageId dirId = new PageId(pageId.pid);
+		DirPage dirPage = new DirPage();
+		PageId curPageId;
+		RID rid = null;
 
-		  // Go thru each directory entry on the dir page.
-		  for (short i=0; i < dirPage.getEntryCnt(); i++)
-		  {
-			  // We need entry for a data page that can store the record plus
-			  // the room for the slot.
-			  if (dirPage.getFreeCnt(i) >= (record.length + DataPage.SLOT_SIZE))
-			  {
-				  // We found one, so pin the data page and insert the record in it.
-				  PageId dataId = dirPage.getPageId(i);
-				  DataPage dataPage = new DataPage();
-				  Minibase.BufferManager.pinPage(dataId, dataPage, PIN_DISKIO);
-				  rid = dataPage.insertRecord(record);
+		while (dirId.pid != INVALID_PAGEID) {
+			// Pin current dir page and get the next dir page.
+			curPageId = new PageId(dirId.pid);
+			Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+			dirId = dirPage.getNextPage();
 
-				  // Record the new record count and new free space count into this
-				  // directory entry and then unpin the data page.
-				  dirPage.setRecCnt(i, dataPage.getSlotCount());
-				  dirPage.setFreeCnt(i, dataPage.getFreeSpace());
-				  Minibase.BufferManager.unpinPage(dataId, UNPIN_DIRTY);
+			// Go thru each directory entry on the dir page.
+			for (short i = 0; i < dirPage.getEntryCnt(); i++) {
+				// We need entry for a data page that can store the record plus
+				// the room for the slot.
+				if (dirPage.getFreeCnt(i) >= (record.length + DataPage.SLOT_SIZE)) {
+					// We found one, so pin the data page and insert the record
+					// in it.
+					PageId dataId = dirPage.getPageId(i);
+					DataPage dataPage = new DataPage();
+					Minibase.BufferManager.pinPage(dataId, dataPage, PIN_DISKIO);
+					rid = dataPage.insertRecord(record);
 
-				  // We're done our search and have a rid, so we can get out.
-				  break;
-			  }
-		  }
+					// Record the new record count and new free space count into
+					// this
+					// directory entry and then unpin the data page.
+					dirPage.setRecCnt(i, dataPage.getSlotCount());
+					dirPage.setFreeCnt(i, dataPage.getFreeSpace());
+					Minibase.BufferManager.unpinPage(dataId, UNPIN_DIRTY);
 
-		  if (rid != null)
-		  {
-			  // We inserted the record and updated the directory entry so
-			  // we need to unpin, write the changes and get out.
-			  Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
-			  break;
-		  }
+					// since the data page was found, we can break
+					break;
+				}
+			}
 
-		  // Still haven't found what we're looking for.
-		  Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
-	  } while (dirId.pid != INVALID_PAGEID);
+			if (rid != null) {
+				// We inserted the record and updated the directory entry so
+				// we need to unpin dirty to write changes and get out.
+				Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
+				break;
+			}
 
-	  if (rid == null)
-	  {
-		  // If we got here then we went thru all the dir pages and couldn't find a
-		  // data page that could hold the record. In this case we need to create a
-		  // new data page to hold it.
-		  DataPage dataPage = new DataPage();
-		  PageId dataId = Minibase.BufferManager.newPage(dataPage, 1);
-		  dataPage.setCurPage(dataId);
-		  rid = dataPage.insertRecord(record);
-		  short slotCount = dataPage.getSlotCount();
-		  short freeSpace = dataPage.getFreeSpace();
-		  Minibase.BufferManager.unpinPage(dataId, UNPIN_DIRTY);
+			// didn't find it, so unpin it clean
+			Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
+		} // end of the while loop
 
-		  // We now need to find a dir page to hold the entry for the new data page
-		  // we created.  At this point we have the pageid of the last dir page 
-		  // (in curPageId) from the previous search.  But we cannot just insert it
-		  // there as there may have been deletes on previous dir pages. Or this
-		  // last dir page may have max entries.  So, unfortunately we need to
-		  // search again from the start.
-		  dirId = new PageId(headId.pid);
-		  boolean addedEntry = false;
+		if (rid == null) {
+			// We never found a page to hold the record, so create a new page
+			DataPage dataPage = new DataPage();
+			PageId dataId = Minibase.BufferManager.newPage(dataPage, 1);
+			dataPage.setCurPage(dataId);
+			rid = dataPage.insertRecord(record);
+			short slotCount = dataPage.getSlotCount();
+			short freeSpace = dataPage.getFreeSpace();
+			Minibase.BufferManager.unpinPage(dataId, UNPIN_DIRTY);
 
-		  do
-		  {
-			  // Pin current dir page and get the next dir page.
-			  curPageId = new PageId(dirId.pid);
-			  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
-			  dirId = dirPage.getNextPage();
+			// Need to find a dir page to hold the entry for the new data page
+			// We can't just insert the pageId from the previous search, since
+			// there may have been deletes on previous dir pages.
+			dirId = new PageId(pageId.pid);
+			boolean addedEntry = false;
 
-			  short entryCnt = dirPage.getEntryCnt();
-			  if (entryCnt < DirPage.MAX_ENTRIES)
-			  {
-				  // There's room for an entry on this dir page.  So enter it, unpin 
-				  // dir page and get out.
-				  dirPage.setPageId(entryCnt, dataId);
-				  dirPage.setRecCnt(entryCnt, slotCount);
-				  dirPage.setFreeCnt(entryCnt, freeSpace);
-				  dirPage.setEntryCnt(++entryCnt);
-				  Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
-				  addedEntry = true;
-				  break;
-			  }
+			// this is just to initialize and avoid compilation issues
+			curPageId = new PageId(INVALID_PAGEID);
 
-			  // Still haven't found what we're looking for.
-			  Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
-		  } while (dirId.pid != INVALID_PAGEID);
+			while (dirId.pid != INVALID_PAGEID) {
+				// Pin current dir page and get the next dir page.
+				curPageId = new PageId(dirId.pid);
+				Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+				dirId = dirPage.getNextPage();
 
-		  if (!addedEntry)
-		  {
-			  // If we got here then every dir page already has max entries.  In this
-			  // case we need to add a new dir page.  We already know that curPageId
-			  // referes to the last dir page from the previous search, so pin it.
-			  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+				short entryCnt = dirPage.getEntryCnt();
+				if (entryCnt < DirPage.MAX_ENTRIES) {
+					// There's room for an entry on this dir page. So enter it,
+					// unpin
+					// dir page and get out.
+					dirPage.setPageId(entryCnt, dataId);
+					dirPage.setRecCnt(entryCnt, slotCount);
+					dirPage.setFreeCnt(entryCnt, freeSpace);
+					dirPage.setEntryCnt(++entryCnt);
+					Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
+					addedEntry = true;
+					break;
+				}
 
-			  // Create the new dir page and record the entry
-			  DirPage newDirPage = new DirPage();
-			  PageId newDirId = Minibase.BufferManager.newPage(newDirPage, 1);
-			  newDirPage.setCurPage(newDirId);
-			  newDirPage.setPageId(0, dataId);
-			  newDirPage.setRecCnt(0, slotCount);
-			  newDirPage.setFreeCnt(0, freeSpace);
-			  newDirPage.setEntryCnt((short)1);
+				// Still haven't found what we're looking for.
+				Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
+			}
 
-			  // Set the old last dir page to point to the new last dir page 
-			  // and vice-versa.
-			  dirPage.setNextPage(newDirId);
-			  newDirPage.setPrevPage(curPageId);
+			if (!addedEntry) {
+				// If we got here then every dir page already has max entries.
+				// In this
+				// case we need to add a new dir page. We already know that
+				// curPageId
+				// referes to the last dir page from the previous search, so pin
+				// it.
+				Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
 
-			  // Unpin both dir pages now that they are modified.
-			  Minibase.BufferManager.unpinPage(newDirId, UNPIN_DIRTY);
-			  Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
-		  }
-	  }
+				// Create the new dir page and record the entry
+				DirPage newDirPage = new DirPage();
+				PageId newDirId = Minibase.BufferManager.newPage(newDirPage, 1);
+				newDirPage.setCurPage(newDirId);
+				newDirPage.setPageId(0, dataId);
+				newDirPage.setRecCnt(0, slotCount);
+				newDirPage.setFreeCnt(0, freeSpace);
+				newDirPage.setEntryCnt((short) 1);
 
-	  return rid;
-  }
+				// Set the old last dir page to point to the new last dir page
+				// and vice-versa.
+				dirPage.setNextPage(newDirId);
+				newDirPage.setPrevPage(curPageId);
 
-  /**
-   * Reads a record from the file, given its id.
-   * 
-   * @throws IllegalArgumentException if the rid is invalid
-   */
-  public byte[] selectRecord(RID rid) {
-	  byte[] record;
-	  DataPage dataPage = new DataPage();
-	  Minibase.BufferManager.pinPage(rid.pageno, dataPage, PIN_DISKIO);
+				// Unpin both dir pages now that they are modified.
+				Minibase.BufferManager.unpinPage(newDirId, UNPIN_DIRTY);
+				Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
+			}
+		}
 
-	  try
-	  {
-		  record = dataPage.selectRecord(rid);
-	  }
-	  catch (Exception e)
-	  {
-		  // Invalid rid, so unpin and throw exception.
-		  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
-		  throw new IllegalArgumentException();            
-	  }
+		return rid;
+	}
 
-	  // Valid rid, so unpin and return the record.
-	  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
-	  return record;
-  }
+	/**
+	 * Reads a record from the file, given its id.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if the rid is invalid
+	 */
+	public byte[] selectRecord(RID rid) {
+		byte[] record;
+		DataPage dataPage = new DataPage();
+		Minibase.BufferManager.pinPage(rid.pageno, dataPage, PIN_DISKIO);
 
-  /**
-   * Updates the specified record in the heap file.
-   * 
-   * @throws IllegalArgumentException if the rid or new record is invalid
-   */
-  public void updateRecord(RID rid, byte[] newRecord) {
-	  // check for null parameters
-	  if (rid == null || newRecord == null)
-	  {
-		  throw new IllegalArgumentException();
-	  }
+		try {
+			record = dataPage.selectRecord(rid);
+		} catch (Exception e) {
+			// Invalid rid, so unpin and throw exception.
+			Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
+			throw new IllegalArgumentException();
+		}
 
-	  DataPage page = new DataPage();
-	  Minibase.BufferManager.pinPage(rid.pageno, page, PIN_DISKIO);
-	  try
-	  {
-		  page.updateRecord(rid, newRecord);
-		  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
-	  }
-	  catch(IllegalArgumentException exception)
-	  {
-		  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
-		  throw exception;
-	  }
-  }
+		// Valid rid, so unpin and return the record.
+		Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
+		return record;
+	}
 
-  /**
-   * Deletes the specified record from the heap file.
-   * 
-   * @throws IllegalArgumentException if the rid is invalid
-   */
-  public void deleteRecord(RID rid) {
-	  //check for invalid null rid
-	  if (rid == null) throw new IllegalArgumentException();
+	/**
+	 * Updates the specified record in the heap file.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if the rid or new record is invalid
+	 */
+	public void updateRecord(RID rid, byte[] newRecord) {
+		// check for null parameters
+		if (rid == null || newRecord == null) {
+			throw new IllegalArgumentException();
+		}
 
-	  //pin datapage w/record to be deleted
-	  DataPage dataPage = new DataPage();
-	  Minibase.BufferManager.pinPage(rid.pageno, dataPage, PIN_DISKIO);
+		DataPage page = new DataPage();
+		Minibase.BufferManager.pinPage(rid.pageno, page, PIN_DISKIO);
+		try {
+			page.updateRecord(rid, newRecord);
+			Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
+		} catch (IllegalArgumentException exception) {
+			// since the record was never updated, unpin cleanly
+			Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
+			throw exception;
+		}
+	}
 
-	  //get length of record being deleted
-	  short recordLength = dataPage.getSlotLength(rid.slotno);
+	/**
+	 * Deletes the specified record from the heap file.
+	 * 
+	 * @throws IllegalArgumentException
+	 *             if the rid is invalid
+	 */
+	public void deleteRecord(RID rid) {
+		// check for invalid null rid
+		if (rid == null)
+			throw new IllegalArgumentException();
 
-	  //delete record & compact record space
-	  try
-	  {
-		  dataPage.deleteRecord(rid);
-		  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
-	  }
-	  catch(IllegalArgumentException exception)
-	  {
-		  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
-		  throw exception;
-	  }
+		// pin datapage w/record to be deleted
+		DataPage dataPage = new DataPage();
+		Minibase.BufferManager.pinPage(rid.pageno, dataPage, PIN_DISKIO);
 
-	  //traverse dirpages until you find the one with entry referencing deleted datapage
-	  DirPage dirPage = new DirPage();
-	  PageId dirId = new PageId(headId.pid);
+		// get length of record being deleted
+		short recordLength = dataPage.getSlotLength(rid.slotno);
 
-	  //go through each dirPage in the heap file
-	  do
-	  {
-		  // Pin current dir page and get the next dir page.
-		  PageId curPageId = new PageId(dirId.pid);
-		  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
-		  dirId = dirPage.getNextPage();
+		// delete record
+		try {
+			dataPage.deleteRecord(rid);
+			Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
+		} catch (IllegalArgumentException exception) {
+			Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_CLEAN);
+			throw exception;
+		}
 
-		  // Go thru each directory entry on the dir page till we find our rid pageid
-		  for (short i=0; i < dirPage.getEntryCnt(); i++)
-		  {
-			  if (dirPage.getPageId(i).pid == rid.pageno.pid)
-			  {//we found the dir entry with the page id of our record
-				  //decrement record count in directory entry
-				  short newRecCnt = dirPage.getRecCnt(i);
-				  newRecCnt--;
-				  dirPage.setRecCnt(i, newRecCnt);
+		// find dirpages referencing deleted datapage
+		DirPage dirPage = new DirPage();
+		PageId dirId = new PageId(pageId.pid);
 
-				  //update free space count in directory entry
-				  short newFreeCnt = dirPage.getFreeCnt(i);
-				  newFreeCnt += recordLength;
-				  dirPage.setFreeCnt(i, newFreeCnt);
+		// go through each dirPage in the heap file
+		while (dirId.pid != INVALID_PAGEID) {
+			// Pin current dir page and get the next dir page.
+			PageId curPageId = new PageId(dirId.pid);
+			Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+			dirId = dirPage.getNextPage();
 
-				  //handle if no records left on datapage (newRecCnt < 1)
-				  if (newRecCnt < 1)
-				  {//need to remove empty datapage
-					  //delete entry in dirpage & compact down
-					  dirPage.compact(i);
+			// Go thru each directory entry looking for the pageid
+			for (int i = 0; i < dirPage.getEntryCnt(); i++) {
+				if (dirPage.getPageId(i).pid == rid.pageno.pid) {
+					// page id of our record was found, decrement record count
+					short newRecCnt = dirPage.getRecCnt(i);
+					newRecCnt--;
+					dirPage.setRecCnt(i, newRecCnt);
 
-					  //unpin datapage & mark dirty for disk io
-					  Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
+					// update free space count in directory entry
+					short newFreeCnt = dirPage.getFreeCnt(i);
+					newFreeCnt += recordLength;
+					dirPage.setFreeCnt(i, newFreeCnt);
 
-					  //delete empty datapage from memory
-					  Minibase.BufferManager.freePage(rid.pageno);
+					// check if no records left on datapage (newRecCnt < 1)
+					if (newRecCnt < 1) {
+						// need to remove empty datapage
+						dirPage.compact(i);
 
-					  //now that we've deleted the datapage, check if
-					  //we need to delete an empty dirpage
-					  short newEntryCnt = dirPage.getEntryCnt();
+						// unpin as dirty to write
+						Minibase.BufferManager.unpinPage(rid.pageno, UNPIN_DIRTY);
 
-					  if (newEntryCnt < 1)
-					  {//need to remove empty dirpage 
-						  //check if head dirpage, if so dont delete
-						  if (curPageId.pid == headId.pid)
-						  {
-							  // Unpin the head dir page.
-							  Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
-							  break;
-						  }
-						  else
-						  {//not head dirpage, so delete after fixing prev/next links
-							  //pin parent dirpage
-							  DirPage parentDirPage = new DirPage();
-							  Minibase.BufferManager.pinPage(dirPage.getPrevPage(), parentDirPage, PIN_DISKIO);
-							  //set nextpage of parent to nextpage of current dirpage
-							  parentDirPage.setNextPage(dirPage.getNextPage());
+						// delete empty datapage from memory
+						Minibase.BufferManager.freePage(rid.pageno);
 
-							  if(dirPage.getNextPage().pid != INVALID_PAGEID)
-							  {
-								  //pin child dirpage
-								  DirPage childDirPage = new DirPage();
-								  Minibase.BufferManager.pinPage(dirPage.getNextPage(), childDirPage, PIN_DISKIO);
+						// now check if dirpage is empty
+						short newEntryCnt = dirPage.getEntryCnt();
 
-								  //set prevpage of child to prevpage of current dirpage
-								  childDirPage.setPrevPage(dirPage.getPrevPage());
+						if (newEntryCnt < 1) {
+							// it is empty, check if head
+							if (curPageId.pid == pageId.pid) {
+								// Unpin the head dir page.
+								Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
+								break;
+							} else {
+								// not the head dirpage, so delete
+								DirPage parentDirPage = new DirPage();
+								Minibase.BufferManager.pinPage(dirPage.getPrevPage(), parentDirPage, PIN_DISKIO);
 
-								  //unpin child page
-								  Minibase.BufferManager.unpinPage(dirPage.getNextPage(), UNPIN_DIRTY);
-							  }
-							  //unpin parent page
-							  Minibase.BufferManager.unpinPage(dirPage.getPrevPage(), UNPIN_DIRTY);
+								// set nextpage of parent to nextpage of current
+								// dirpage
+								parentDirPage.setNextPage(dirPage.getNextPage());
 
-						  }
+								if (dirPage.getNextPage().pid != INVALID_PAGEID) {
+									// pin child dirpage
+									DirPage childDirPage = new DirPage();
+									Minibase.BufferManager.pinPage(dirPage.getNextPage(), childDirPage, PIN_DISKIO);
 
-						  //unpin & free empty dirpage
-						  Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
-						  Minibase.BufferManager.freePage(curPageId);
-						  break;
-					  }
-				  }
-			  }
+									// set prevpage of child to prevpage of
+									// current dirpage
+									childDirPage.setPrevPage(dirPage.getPrevPage());
 
-		  }
+									// unpin child page
+									Minibase.BufferManager.unpinPage(dirPage.getNextPage(), UNPIN_DIRTY);
+								}
+								// unpin parent page
+								Minibase.BufferManager.unpinPage(dirPage.getPrevPage(), UNPIN_DIRTY);
 
-		  // Unpin the current dir page.
-		  Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
-	  } while (dirId.pid != INVALID_PAGEID);
-  }
+							}
 
-  /**
-   * Gets the number of records in the file.
-   */
-  public int getRecCnt() {
-	  int count = 0;
-	  DirPage dirPage = new DirPage();
-	  PageId dirId = new PageId(headId.pid);
+							// unpin dirty & free
+							Minibase.BufferManager.unpinPage(curPageId, UNPIN_DIRTY);
+							Minibase.BufferManager.freePage(curPageId);
+							break;
+						}
+					}
+				}
 
-	  //go through each dirPage in the heap file
-	  do
-	  {
-		  // Pin current dir page and get the next dir page.
-		  PageId curPageId = new PageId(dirId.pid);
-		  Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
-		  dirId = dirPage.getNextPage();
+			}
 
-		  // Go thru each directory entry on the dir page.
-		  for (short i=0; i < dirPage.getEntryCnt(); i++)
-		  {
-			  count = count + dirPage.getRecCnt(i);
-		  }
+			// Unpin the current dir page.
+			Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
+		}
+	}
 
-		  // Unpin and free the current dir page.
-		  Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
-	  } while (dirId.pid != INVALID_PAGEID);
+	/**
+	 * Gets the number of records in the file.
+	 */
+	public int getRecCnt() {
+		int count = 0;
+		DirPage dirPage = new DirPage();
+		PageId dirId = new PageId(pageId.pid);
 
-	  return count;
-  }
+		// go through each dirPage in the heap file
+		while (dirId.pid != INVALID_PAGEID) {
+			// Pin current dir page and get the next dir page.
+			PageId curPageId = new PageId(dirId.pid);
+			Minibase.BufferManager.pinPage(curPageId, dirPage, PIN_DISKIO);
+			dirId = dirPage.getNextPage();
 
-  /**
-   * Initiates a sequential scan of the heap file.
-   */
-  public HeapScan openScan() {
-    return new HeapScan(this);
-  }
+			// Go thru each directory entry on the dir page.
+			for (short i = 0; i < dirPage.getEntryCnt(); i++) {
+				count = count + dirPage.getRecCnt(i);
+			}
 
-  /**
-   * Returns the name of the heap file.
-   */
-  public String toString() {
-	  return fileName;
-  }
+			// Unpin and free the current dir page.
+			Minibase.BufferManager.unpinPage(curPageId, UNPIN_CLEAN);
+		}
+
+		return count;
+	}
+
+	/**
+	 * Initiates a sequential scan of the heap file.
+	 */
+	public HeapScan openScan() {
+		return new HeapScan(this);
+	}
+
+	/**
+	 * Returns the name of the heap file.
+	 */
+	public String toString() {
+		return fileName;
+	}
 
 } // public class HeapFile implements GlobalConst
