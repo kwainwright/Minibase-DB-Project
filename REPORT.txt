@@ -1,6 +1,7 @@
+-----------------------------------------------------------------
 Overall Status:  
 	This is the overall implementation for both parts one and two of the team assignment, including both the BufMgr and HeapFile portions.  We worked the two parts as one assignment, as it facilitated a division of labor.  While there were some dependencies between BugMgr and HeapFile, completing method signatures in BufMgr allowed HeapFile development to begin. One caveat is that BugMgr needed to be fully implemented and tested before HeapFile testing could begin.  All code is 100% complete and all tests are 100% passed.
-	We utilized GitHub to enable collaborative software development and for version control.  Contained in the .zip file is a clone of the GitHub repository.
+	We utilized GitHub to enable collaborative software development and for version control.  Contained in the .zip file is a clone of the GitHub repository.  We have used GitHub for nearly all of our group projects to date.
 	We began the project by reading and rereading the applicable portions of the textbook in order to understand buffer and heap management.  The next step was to familiarize ourselves with the privided code, psuedo-code, and test cases.  Once this was accompished, development of BugMgr began, followed by HeapFile development.  They were completed in this order as well due to the aformentioned dependencies.  As with any collaborative development, many methods and even classes were iterated over several times, changes being made for correctness, readability, efficiency, etc.  Often times all three team memebers contributed to a given section of code in this fashion.
 	As part of our implementation, new files/classes were created for Frame Description, Clock Frame Selection, and Page-to-Frame mapping.  These will be descibed in more detail below.
 
@@ -43,17 +44,27 @@ The methods we implemented and a very brief description of each are:
 	getNumUnpinned - returns the total number of unpinned buffer frames.
 
 ---
-HeapFile.java.  HeapFile.java contains the HeapFile class and is applicable to Part II of the asignment.  
+HeapFile.java.  HeapFile.java contains the HeapFile class and is applicable to Part II of the asignment.  The HeapFile class provides basic support for inserting,selecting, updating, and deleting records. Temporary heap files are used for external sorting and in other relational operators. The data members we added are:
+	String fileName - Name of the heap file
+	PageId pageId - Page Id of the above file allocated on disk
+	Boolean isTemp - Indicates if this is a temporary heap file (not stored persistently)
 
+The methods we implemented and a very brief description of each are:
+	HeapFile - Class constructor.  File name is null if temp.
+	finalize - Garbage collector cleanup for temporary files
+	deleteFile - Deletes the heap file from the database, freeing all of its pages.
+	insertRecord - Inserts a new record into the file and returns its Record Id.  Throws an exception if the record is too large.  Will search existing pages for room, or create a new one if none exist that are available.
+	selectRecord - Reads a record from the file, based upon passed in Id.
+	updateRecord - Updates a specified record in the heap file.
+	deleteRecord - Deletes a specified record from the heap file.  It must also clean up and/or re-link any directory pages referencing the deleted record.
+	getRecCount - Returns the number of records in the file.
+	toString - Accessor for file name
 
 ----------------------------------------------------------------
 Division of Labor:
-   
-    We began by having everyone read the chapter and get themselves familiar with how the buffer manager should work.
-    We also had to read up on how the clock replacement policy should get implemented. We would meet briefly after class
-    to go over what has been completed and what still needs to be implemented. 
-    
-    The BufMgr class was implemented by Bill Annocki, Mike Norris, & Sean Fast (45 hours). The Clock and FrameDesc classes were 
-    implemented by Dave Gwalthney and Dave Shanline (30 hours). The integration with Github and Eclipse was set up by Dave Gwalthney & 
-    Dave Shanline.
-    
+
+	We began the project by reading and rereading the applicable portions of the textbook in order to understand buffer and heap management.  The next step was to familiarize ourselves with the provided code, psuedo-code, and test cases.  We met several times at each phase of the development.
+
+	The initial GitHub setup and importing of provided code and test cases was performed by Kevin Wainwright.  The implementation, as mentioned earlier, was collaborative, with all three team members making contributions to all three areas. However, Kevin Wainwright roughly split his time between Part I (Buffer Management) and Part II (Heap File), whereas Mike Peacock spent more of his time on Buffer Management and Scott Hind spent more of his time on Heap File (a roughly 70-30 split each).  All members contributed to this final report.  
+
+	Overall, in retrospective, we estimate that our team spent a collective 20 hours on the up-front research/tasks, 25 hours in implementation (including testing), and five hours on report generation.
