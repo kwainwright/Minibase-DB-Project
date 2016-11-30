@@ -1,0 +1,59 @@
+Overall Status:  
+	This is the overall implementation for both parts one and two of the team assignment, including both the BufMgr and HeapFile portions.  We worked the two parts as one assignment, as it facilitated a division of labor.  While there were some dependencies between BugMgr and HeapFile, completing method signatures in BufMgr allowed HeapFile development to begin. One caveat is that BugMgr needed to be fully implemented and tested before HeapFile testing could begin.  All code is 100% complete and all tests are 100% passed.
+	We utilized GitHub to enable collaborative software development and for version control.  Contained in the .zip file is a clone of the GitHub repository.
+	We began the project by reading and rereading the applicable portions of the textbook in order to understand buffer and heap management.  The next step was to familiarize ourselves with the privided code, psuedo-code, and test cases.  Once this was accompished, development of BugMgr began, followed by HeapFile development.  They were completed in this order as well due to the aformentioned dependencies.  As with any collaborative development, many methods and even classes were iterated over several times, changes being made for correctness, readability, efficiency, etc.  Often times all three team memebers contributed to a given section of code in this fashion.
+	As part of our implementation, new files/classes were created for Frame Description, Clock Frame Selection, and Page-to-Frame mapping.  These will be descibed in more detail below.
+
+----------------------------------------------------------------
+File Descriptions: 
+	Based upon the provided materials, the majority of the work (aside from the new files was in) BugMgr.java and HeapFile.java.  It should be noted that other files were changed in minor ways for things like signature mapping, rippling changes from BufMgr/HeapFile.java, etc.
+
+----------
+	The following is a list of new files (all applicable to part I) and a brief description of each:
+
+Clock.java.  The clock.java file contains the Clock class, which extends the Replacer abstract class.  The only method that needed to be implemented for this project was pickVictim.  pickVictim returns a reference to an available frame to be used by the caller.
+
+FrameDesc.java.  The FrameDesc.java file contains the FrameDesc class.  FlameDesc is simply a container to hold all the attributes/state variables of a given Frame.  The states defined in the class are:
+	boolean 	isDirty;
+    	int 		pinCount;
+    	boolean 	isValid;
+    	boolean 	refBit;
+    	PageId 	pageno; 
+
+PageFrameMap.java.  PageFrameMap.java contains the PageFrameMap class, which used to map back and forth pages to frames for efficient lookups.  PageFrameMap contains two Java HashMaps to enable this.  Implemented methods are addToMap, removeFromMap, getPageFromFraame and getFrameFromPage.
+
+----------
+	The following is a list of extensively modified files and a brief description of each.   
+
+---
+BufMgr.java.  BuffMgr.java contains the BufMgr class and is applicable to Part I of the asignment.  BufMgr manages the interaction of memory pages and disk storage, finding available memory records to read/write main memory pages to/from disk.  BugMgr facilitates the selection of unused records via pinning/unpinning records in memory.  The data members we added are:
+	Page[] bufpool - An array of pages
+	FrameDesc[] frametab - Descriptors for the frames
+	PageFrameMap pageFrameMap - The page/frame mapper
+	Replacer replacer - the replacer instance
+The methods we implemented and a very brief description of each are:
+	BufMgr - The constructor
+	pinPage - This method will assign a passed in page number to a frame in the buffer pool and assign a pin to it.  If the page is already in the buffer pool, it increments the pin count; if not, it utilizes the replacer.  Finally, this method will write the frame's content to disk when applicable.
+	unpinPage - Unpins a disk page from the buffer pool, decreasing its pin count.
+	newPage - Allocates a run of new disk pages and pins the first one in the buffer pool.
+	freePage - Deallocates a single page from disk, freeing it from the pool if needed.
+	flushAllPages - Writes all applicable pages to disk
+	flushPage - Writes the page to disk if applicable
+	getNumBuffers - Returns the total number of buffer frames.
+	getNumUnpinned - returns the total number of unpinned buffer frames.
+
+---
+HeapFile.java.  HeapFile.java contains the HeapFile class and is applicable to Part II of the asignment.  
+
+
+----------------------------------------------------------------
+Division of Labor:
+   
+    We began by having everyone read the chapter and get themselves familiar with how the buffer manager should work.
+    We also had to read up on how the clock replacement policy should get implemented. We would meet briefly after class
+    to go over what has been completed and what still needs to be implemented. 
+    
+    The BufMgr class was implemented by Bill Annocki, Mike Norris, & Sean Fast (45 hours). The Clock and FrameDesc classes were 
+    implemented by Dave Gwalthney and Dave Shanline (30 hours). The integration with Github and Eclipse was set up by Dave Gwalthney & 
+    Dave Shanline.
+    

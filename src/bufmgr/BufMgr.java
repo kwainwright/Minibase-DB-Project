@@ -279,7 +279,7 @@ public class BufMgr implements GlobalConst {
 		  {
 			  // Only flush frames that have valid pages that are dirty
 			  flushPage(frametab[i].pageno);   
-			  frametab[i].isDirty = false;
+			  //frametab[i].isDirty = false; - now done in flushPage
 		  }
 	  }
 
@@ -293,10 +293,12 @@ public class BufMgr implements GlobalConst {
   public void flushPage(PageId pageno) {
 	  
 	  Integer FrameNum = pageFrameMap.getFrameFromPage(pageno.pid);  
-	  if (FrameNum != null)
+	  if ((FrameNum != null) &&
+			  (frametab[FrameNum].isDirty))
 	  {
 		  // Write the page to disk
 		  Minibase.DiskManager.write_page(pageno, bufpool[FrameNum]);
+		  frametab[FrameNum].isDirty = false;
 	  }
 	  else
 	  {
