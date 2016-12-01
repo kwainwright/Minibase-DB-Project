@@ -33,14 +33,14 @@ BufMgr.java.  BuffMgr.java contains the BufMgr class and is applicable to Part I
 	PageFrameMap pageFrameMap - The page/frame mapper
 	Replacer replacer - the replacer instance
 The methods we implemented and a very brief description of each are:
-	BufMgr - The constructor
+	BufMgr - The constructor. Initializes the containers and the Replacer(Clock).
 	pinPage - This method will assign a passed in page number to a frame in the buffer pool and assign a pin to it.  If the page is already in the buffer pool, it increments the pin count; if not, it utilizes the replacer.  Finally, this method will write the frame's content to disk when applicable.
 	unpinPage - Unpins a disk page from the buffer pool, decreasing its pin count.
 	newPage - Allocates a run of new disk pages and pins the first one in the buffer pool.
 	freePage - Deallocates a single page from disk, freeing it from the pool if needed.
 	flushAllPages - Writes all applicable pages to disk
 	flushPage - Writes the page to disk if applicable
-	getNumBuffers - Returns the total number of buffer frames.
+	getNumFrames - Returns the total number of buffer frames.
 	getNumUnpinned - returns the total number of unpinned buffer frames.
 
 ---
